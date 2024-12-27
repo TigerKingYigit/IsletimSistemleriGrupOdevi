@@ -7,96 +7,171 @@
 #include <fcntl.h> 
 #include <signal.h>
 
-#define TRUE          1
-#define MAX_COMMANDS 20
-#define MAX_ARGS     20
+void handle_child_termination(int sig) {
+    int status;
+    pid_t pid;
 
-// *** GLOBAL VARIABLES ***
-int numberOfCommands;
-char* commands[MAX_COMMANDS] = { NULL };
-int background = 0;
+    while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
+        printf("[%d] retval: %d\n", pid, WEXITSTATUS(status));
+    }
+}
 
-char* commandList[] = {};
-// ************
+void executeSingleCommand() {
+    char * binaryPath = NULL;
+    char * args[MAX_ARGS] = { NULL };
+    
+    // Take main command and append it to '/bin/' path
+    binaryPath = malloc(6 + strlen(commands[0]));
+    strcpy(binaryPath, "/bin/");
+    strcat(binaryPath, commands[0]);
 
-int fileInput(char* command[], char* inputFile) {
+    // Check for arguments in entered commands
+    int i;
+    for(i = 0; i < numberOfCommands; i++)
+    {   
+        args[i] = strdup(commands[i]);
+    }
 
+    execv(binaryPath, args);
+    
+    // If it reaches this far, means that execv returned, so the command was not excecuted.
+    puts("Error: Unknown command.");
+    // The process kills itself, since execv does not get executed.
+    kill(getpid(), SIGINT);
+}
+
+
+int pipeFonk(char* command[], char* command2[], int a){
+
+    int fd[1][2];
+    int err;
+    int i;
+    
+    for(i = 0; i < 3; i++){
+        if(pipe(fd[i]) < 0){
+            return 1;
+        }
+    }
+
+    int pid1 = fork();
+
+    if(pid1 == 0){
+        close(fd[0][0]);
+        close(fd[1][0]);
+        close(fd[1][1]);
+        
+        dup2(fd[0][1], STDOUT_FILENO);
+        
+        close(fd[0][1]);
+
+        err = execvp(command[0], command);
+    }
+    
+    int pid2 = fork();
+
+    if(pid2 == 0){
+        close(fd[0][1]);
+        close(fd[1][0]);
+        close(fd[1][0]);
+
+        dup2(fd[0][0], STDIN_FILENO);
+        
+        close(fd[0][0]);
+
+        if(strcmp(command2[a],"increment") == 0){
+            char *args[] = {"increment", command[1], NULL};
+            err = execvp("./increment", args);
+        }
+        else{
+            char* args[] = {command2[a], command2[a+1], NULL};
+            err = execvp(command2[a], args);
+        }
+
+        return 0;
+    }
+
+    waitpid(pid1, NULL, 0);
+    waitpid(pid2, NULL, 0);
+
+    return 0;
+}
+
+int fileInput(char* command[], char* inputFile){
+    
     pid_t pid;
     int file;
     int err;
 
     pid = fork();
 
-    if (pid == 0) {
+    if(pid == 0){
         file = open(inputFile, O_RDONLY, 0600);
         dup2(file, STDIN_FILENO);
         close(file);
-
-        if (strcmp(command[0], "increment") == 0) {
-            char* args[] = { "increment", inputFile, NULL };
+        
+        if(strcmp(command[0],"increment") == 0){
+            char *args[] = {"increment", inputFile, NULL};
             err = execvp("./increment", args);
             return -1;
         }
-        else {
+        else{
             err = execvp(command[0], command);
             return -1;
         }
-
-        if (err == -1) {
+        
+        if(err == -1){
             printf("Error::error 404");
             return 2;
         }
     }
-    else {
+    else{
         int wstatus;
 
         wait(&wstatus);
-        if (WIFEXITED(wstatus)) {
+        if(WIFEXITED(wstatus)){
             int statusCode = WEXITSTATUS(wstatus);
-            if (statusCode == 0) {
+            if(statusCode == 0){
             }
-            else {
+            else{
                 printf("Error::Failure with status code %d", statusCode);
             }
         }
     }
 }
 
-int fileOutput(char* command[], char* outputFile) {
-
+int fileOutput(char* command[], char* outputFile){
+    
     pid_t pid;
     int file;
 
     pid = fork();
 
-    if (pid == 0) {
+    if(pid == 0){
         file = open(outputFile, O_CREAT | O_TRUNC | O_WRONLY, 0600);
         dup2(file, STDOUT_FILENO);
         close(file);
-
+        
         int err = execvp(command[0], command);
-        if (err == -1) {
+        if(err == -1){
             printf("Error::error 404");
             return 2;
         }
     }
-    else {
+    else{
         int wstatus;
 
         wait(&wstatus);
-        if (WIFEXITED(wstatus)) {
+        if(WIFEXITED(wstatus)){
             int statusCode = WEXITSTATUS(wstatus);
-            if (statusCode == 0) {
+            if(statusCode == 0){
                 printf("Success!\n");
             }
-            else {
+            else{
                 printf("Error::Failure with status code %d", statusCode);
             }
         }
     }
 }
-
-
 
 int pipeFonkOrder(char* command[]){
 
@@ -153,8 +228,8 @@ int pipeFonkOrder(char* command[]){
         exit(0);
     }
     else if (pid1 > 0) {
-        // Ebeveyn sÃ¼reÃ§
-        wait(NULL); // Ä°lk Ã§ocuÄŸun bitmesini bekleyin
+        // Ebeveyn süreç
+        wait(NULL); // Ýlk çocuðun bitmesini bekleyin
 
         pid_t pid2 = fork();
         if (pid2 == 0) {
@@ -204,7 +279,7 @@ int pipeFonkOrder(char* command[]){
 
             exit(0);
         } else if (pid2 > 0) {
-            wait(NULL); // Ä°kinci Ã§ocuÄŸun bitmesini bekleyin
+            wait(NULL); // Ýkinci çocuðun bitmesini bekleyin
 
             if(numberOfCommands == 3){
                 char* command3[5];
@@ -267,62 +342,76 @@ int pipeFonkOrder(char* command[]){
     return 0;
 }
 
-
-int pipeFonk(char* command[], char* command2[], int a){
-
-    int fd[1][2];
-    int err;
-    int i;
-    
-    for(i = 0; i < 3; i++){
-        if(pipe(fd[i]) < 0){
-            return 1;
-        }
-    }
-
-    int pid1 = fork();
-
-    if(pid1 == 0){
-        close(fd[0][0]);
-        close(fd[1][0]);
-        close(fd[1][1]);
-        
-        dup2(fd[0][1], STDOUT_FILENO);
-        
-        close(fd[0][1]);
-
-        err = execvp(command[0], command);
-    }
-    
-    int pid2 = fork();
-
-    if(pid2 == 0){
-        close(fd[0][1]);
-        close(fd[1][0]);
-        close(fd[1][0]);
-
-        dup2(fd[0][0], STDIN_FILENO);
-        
-        close(fd[0][0]);
-
-        if(strcmp(command2[a],"increment") == 0){
-            char *args[] = {"increment", command[1], NULL};
-            err = execvp("./increment", args);
-        }
-        else{
-            char* args[] = {command2[a], command2[a+1], NULL};
-            err = execvp(command2[a], args);
-        }
-
-        return 0;
-    }
-
-    waitpid(pid1, NULL, 0);
-    waitpid(pid2, NULL, 0);
-
-    return 0;
+void sig_chld(int signo){
+    int status, child_val,chid;
+	chid = waitpid(-1, &status, WNOHANG);
+	if (chid > 0)
+	{
+		if (WIFEXITED(status))
+	    {
+	        child_val = WEXITSTATUS(status);
+	        printf("[%d] retval : %d \n",chid, child_val);
+	    }
+	}
 }
 
+int workOnBackground(char **args){
+	pid_t pid;
+	int status;
+
+	struct sigaction act;
+	act.sa_handler = sig_chld;
+	sigemptyset(&act.sa_mask);
+	act.sa_flags = SA_NOCLDSTOP;
+
+	if (sigaction(SIGCHLD,&act,NULL)<0)
+	{
+		fprintf(stderr,"sigaction failed\n");
+		return 1;
+	}
+
+	pid=fork();
+	if (pid == 0)
+	{
+		if (execvp(args[0],args) == -1)
+		{
+			printf("Komut bulunamadi");
+			kill(getpid(),SIGTERM);
+            background = 0;
+		}
+	}
+	else
+	{
+		printf("Proses PID:%d Degeriyle Olusturuldu\n",pid);
+	}
+	return 1; 
+}
+
+int execution(char **args){
+	if (background==0)
+	{
+		pid_t pid;
+		int status;
+		pid=fork();
+		if (pid == 0)
+		{
+			if (execvp(args[0],args) == -1)
+			{
+				printf("Komut Bulunamadi");
+				kill(getpid(),SIGTERM);
+			}
+		}
+		else
+		{
+			waitpid(pid,NULL,0);
+		}
+	}
+	else
+	{
+		workOnBackground(args);
+	}
+	return 1; 
+}
 
 int detectCommand(char* args[]){
     int isPipe = 0;
@@ -410,4 +499,37 @@ int detectCommand(char* args[]){
 
 	execution(command);
     
+}
+
+int main(int argc) 
+{
+    char line[100];
+    char* tokens[100];
+    int tokenSayisi;
+
+    while(1){
+        memset(line, '\0', 100);
+        printf("> ");
+        fflush(stdout);
+
+        
+        if(fgets(line, 100, stdin) == NULL)
+        {
+            printf("Error::");
+            return 0;
+        }
+
+        tokens[0] = strtok(line," \n\t");
+        tokenSayisi = 1;
+        while((tokens[tokenSayisi] = strtok(NULL, " \n\t")) != NULL) {
+            tokenSayisi++;
+        }
+
+        int err = detectCommand(tokens);
+
+        if(err == 0)
+            break;
+    }
+
+    return 0;
 }
