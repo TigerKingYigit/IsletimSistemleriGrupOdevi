@@ -266,3 +266,59 @@ int pipeFonkOrder(char* command[]){
     }
     return 0;
 }
+
+
+int pipeFonk(char* command[], char* command2[], int a){
+
+    int fd[1][2];
+    int err;
+    int i;
+    
+    for(i = 0; i < 3; i++){
+        if(pipe(fd[i]) < 0){
+            return 1;
+        }
+    }
+
+    int pid1 = fork();
+
+    if(pid1 == 0){
+        close(fd[0][0]);
+        close(fd[1][0]);
+        close(fd[1][1]);
+        
+        dup2(fd[0][1], STDOUT_FILENO);
+        
+        close(fd[0][1]);
+
+        err = execvp(command[0], command);
+    }
+    
+    int pid2 = fork();
+
+    if(pid2 == 0){
+        close(fd[0][1]);
+        close(fd[1][0]);
+        close(fd[1][0]);
+
+        dup2(fd[0][0], STDIN_FILENO);
+        
+        close(fd[0][0]);
+
+        if(strcmp(command2[a],"increment") == 0){
+            char *args[] = {"increment", command[1], NULL};
+            err = execvp("./increment", args);
+        }
+        else{
+            char* args[] = {command2[a], command2[a+1], NULL};
+            err = execvp(command2[a], args);
+        }
+
+        return 0;
+    }
+
+    waitpid(pid1, NULL, 0);
+    waitpid(pid2, NULL, 0);
+
+    return 0;
+}
