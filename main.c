@@ -322,3 +322,92 @@ int pipeFonk(char* command[], char* command2[], int a){
 
     return 0;
 }
+
+
+int detectCommand(char* args[]){
+    int isPipe = 0;
+    int j = 0;
+    char* command[100];
+
+    while(args[j] != NULL){
+        if(strstr(args[j],";") != 0)
+        {
+            isPipe = 1;
+            break;
+        }
+        j++;
+    }
+
+    j = 0;
+
+    while(args[j] != NULL)
+    {
+        if((strcmp(args[j],">") == 0) || (strcmp(args[j],"<") == 0) || (strcmp(args[j],"&") == 0) || (strcmp(args[j],"|") == 0))
+        {
+            break;
+        }
+        command[j] = args[j];
+        j++;
+    }
+
+    if(args[j] == NULL){
+        if(strcmp(command[0], "quit") == 0){
+            int status;
+            while (!waitpid(-1,&status,WNOHANG)){}
+            return 0;
+        }
+    }
+
+    command[j] = NULL;
+
+    if(isPipe == 1){
+        char* commands[20];
+        int r = 0;
+        j = 0;
+        while(args[j] != NULL){
+            if(strstr(args[j], ";") != 0){
+                args[j][strlen(args[j]) - 1] = '\0';
+                commands[r] = args[j];
+                commands[++r] = "+";
+            }
+            else{
+                commands[r] = args[j];
+            }
+            r++;
+            j++;
+        }
+        
+        commands[r] = "+";
+        pipeFonkOrder(commands);
+        return 1;
+    }
+    else{
+        while(args[j] != NULL && background == 0)
+        {
+            if(strcmp(args[j], ">") == 0){
+                fileOutput(command, args[j+1]);
+                return 1;
+            }
+
+            if(strcmp(args[j], "<") == 0){
+                fileInput(command, args[j+1]);
+                return 1;
+            }
+
+            if(strcmp(args[j], "|") == 0){
+                pipeFonk(command, args, j+1);
+                return 1;
+            }
+
+            if(strcmp(args[j], "&") == 0){
+                background = 1;
+                return 1;
+            }
+        }
+    }
+
+    command[j] = NULL;
+
+	execution(command);
+    
+}
